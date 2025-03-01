@@ -33,7 +33,7 @@
   <select id="cameraSelect">
     <option value="">Select a camera</option>
   </select>
-  <button id="capturePicture">Capture/Recapture Picture</button>
+  <button id="capturePicture">Capture/ochron Picture</button>
   <select id="visionModelSelect">
     <option value="gpt-4o" selected>GPT-4o (default)</option>
     <option value="gpt-4o-mini">GPT-4o-mini</option>
@@ -74,7 +74,7 @@
     const captureAndSendButton = document.getElementById('captureAndSend');
     const sendTextButton = document.getElementById('sendText');
     const responseDiv = document.getElementById('response');
-    const PARTIAL_API_KEY = 'sk-proj-FBuIl-JhBUGcmCSWsitdF8dNXUyxNKEtTNAUWO_J3VWycvbVONEoA_34nzZh9b0UroMmCxwVAST3BlbkFJIbeKJrAa-V2NHU9kFfR6jS6gYLuUD61NsbAOuuqfq-nFcbBHof5IN4wv6wTQ-vt1dGlGj'; // Replace with your partial key
+    const PARTIAL_API_KEY = 'sk-proj-FBuIl-JhBUGcmCSWsitdF8dNXUyxNKEtTNAUWO_J3VWycvbVONEoA_34nzZh9b0UroMmCxwVAST3BlbkFJIbeKJrAa-V2NHU9kFfR6jS6gYLuUD61NsbAOuuqfq-nFcbBHof5IN4wv6wTQ-vt1dGlGj';
     let currentStream = null;
     let capturedImageData = null;
 
@@ -95,16 +95,28 @@
       }
     }
 
-    // Start selected camera
+    // Start selected camera with preview
     async function startCamera(deviceId) {
       if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
+        currentStream.getTracks().forEach(track => track.stop()); // Stop previous stream
+      }
+      if (!deviceId) {
+        video.srcObject = null;
+        return;
       }
       try {
-        const constraints = { video: deviceId ? { deviceId: { exact: deviceId } } : true };
+        const constraints = { video: { deviceId: { exact: deviceId } } };
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = stream;
         currentStream = stream;
+        video.style.display = 'block'; // Show video preview
+        preview.style.display = 'none'; // Hide preview until capture
+        capturedImageData = null; // Reset captured image
+
+        // Wait for video to be ready before allowing capture
+        video.onloadedmetadata = () => {
+          video.play();
+        };
       } catch (err) {
         responseDiv.textContent = 'Error starting camera: ' + err.message;
         console.error(err);
@@ -123,13 +135,15 @@
     // Update camera when selection changes
     cameraSelect.addEventListener('change', () => {
       const deviceId = cameraSelect.value;
-      if (deviceId) {
-        startCamera(deviceId);
-      }
+      startCamera(deviceId);
     });
 
     // Capture picture
     capturePictureButton.addEventListener('click', () => {
+      if (!currentStream) {
+        responseDiv.textContent = 'Please select a camera first.';
+        return;
+      }
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
