@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photo & Text to ChatGPT</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 400px; margin: auto; }
+    #video, #preview { width: 100%; height: 300px; object-fit: cover; }
+    #preview { display: none; }
+    #prompt, #textPrompt { width: 100%; height: 80px; margin: 10px 0; }
+    #visionModelSelect, #textModelSelect { width: 100%; padding: 5px; margin: 10px 0; }
+    #apiKeySuffix { width: 100%; padding: 5px; margin: 10px 0; }
+    button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; margin: 5px 0; }
+    button:disabled { background: #cccccc; cursor: not-allowed; }
+    #response { margin-top: 10px; white-space: pre-wrap; }
+    hr { margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <h2>Photo & Text to ChatGPT</h2>
+
+  <!-- API Key Suffix Input -->
+  <h3>API Key Suffix</h3>
+  <input type="text" id="apiKeySuffix" placeholder="Enter last characters of API key">
+
+  <hr>
+
+  <!-- Photo Section -->
+  <h3>Photo Input</h3>
+  <video id="video" autoplay></video>
+  <img id="preview" alt="Captured Image">
+  <select id="visionModelSelect">
+    <option value="gpt-4o" selected>GPT-4o (default)</option>
+    <option value="gpt-4o-mini">GPT-4o-mini</option>
+    <option value="gpt-4-turbo">GPT-4-turbo</option>
+  </select>
+  <textarea id="prompt" placeholder="Enter your prompt for the photo"></textarea>
+  <button id="capture">Take Picture and Send</button>
+
+  <hr>
+
+  <!-- Text Section -->
+  <h3>Text Input</h3>
+  <select id="textModelSelect">
+    <option value="gpt-4o" selected>GPT-4o (default)</option>
+    <option value="gpt-4o-mini">GPT-4o-mini</option>
+    <option value="gpt-4-turbo">GPT-4-turbo</option>
+    <option value="gpt-4.5">GPT-4.5</option>
+    <option value="gpt-3.5-turbo">GPT-3.5-turbo</option>
+    <option value="o1-preview">o1-preview</option>
+    <option value="o1-mini">o1-mini</option>
+    <option value="o3-mini">o3-mini</option>
+  </select>
+  <textarea id="textPrompt" placeholder="Enter your text-only prompt here"></textarea>
+  <button id="sendText">Send Text</button>
+
+  <div id="response"></div>
+
+  <script>
+    const video = document.getElementById('video');
+    const preview = document.getElementById('preview');
+    const promptInput = document.getElementById('prompt');
+    const visionModelSelect = document.getElementById('visionModelSelect');
+    const textModelSelect = document.getElementById('textModelSelect');
+    const textPromptInput = document.getElementById('textPrompt');
+    const apiKeySuffixInput = document.getElementById('apiKeySuffix');
+    const captureButton = document.getElementById('capture');
+    const sendTextButton = document.getElementById('sendText');
+    const responseDiv = document.getElementById('response');
+    const PARTIAL_API_KEY = 'sk-proj-5a_kSPWS3gbFfRK4NCpBjdGNLSBmFAM7pJARHoc_KG9_RZzKH-2FdkJjmmjixeNrR28TO7alE8T3BlbkFJ6wUtOkKZadzNvfobUy8zDWIHcgdBePSS__5p0h7fy5W7fIkyDy74dDhUnbTY1oCv_16jNJ'; // Replace with your partial key (minus last characters)
+
+    // Start front-facing camera
+    navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: 'user' }
+    })
+      .then(stream => {
+        video.srcObject = stream;
+      })
+      .catch(err => {
+        responseDiv.textContent = 'Error accessing front camera: ' + err.message;
+      });
+
+    // Photo capture and send
+    captureButton.addEventListener('click', async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      const imageData = canvas.toDataURL('image/jpeg');
+
+      preview.src = imageData;
+      preview.style.display = 'block';
+      video.style.display = 'none';
+
+      const base64Image = imageData.split(',')[1];
+      const prompt = promptInput.value || 'Describe this image';
+      const selectedModel = visionModelSelect.value;
+      const apiKeySuffix = apiKeySuffixInput.value.trim();
+      const fullApiKey = PARTIAL_API_KEY + apiKeySuffix;
+
+      if (!apiKeySuffix) {
+        responseDiv.textContent = 'Please enter the API key suffix.';
+        return;
+      }
+
+      responseDiv.textContent = 'Loading...';
+      captureButton.disabled = true;
+      sendTextButton.disabled = true;
+
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${fullApiKey}`
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: prompt },
+                  { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } }
+                ]
+              }
+            ]
+          })
+        });
+
+        const data = await response.json();
+        if (data.choices && data.choices[0]) {
+          responseDiv.textContent = data.choices[0].message.content;
+        } else {
+          responseDiv.textContent = 'Error: ' + (data.error?.message || 'Unknown error');
+        }
+      } catch (err) {
+        responseDiv.textContent = 'Fetch error: ' + err.message;
+      } finally {
+        captureButton.disabled = false;
+        sendTextButton.disabled = false;
+      }
+    });
+
+    // Text-only send
+    sendTextButton.addEventListener('click', async () => {
+      const prompt = textPromptInput.value;
+      const selectedModel = textModelSelect.value;
+      const apiKeySuffix = apiKeySuffixInput.value.trim();
+      const fullApiKey = PARTIAL_API_KEY + apiKeySuffix;
+
+      if (!prompt) {
+        responseDiv.textContent = 'Please enter a text prompt.';
+        return;
+      }
+      if (!apiKeySuffix) {
+        responseDiv.textContent = 'Please enter the API key suffix.';
+        return;
+      }
+
+      responseDiv.textContent = 'Loading...';
+      captureButton.disabled = true;
+      sendTextButton.disabled = true;
+
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${fullApiKey}`
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages: [
+              {
+                role: 'user',
+                content: prompt
+              }
+            ]
+          })
+        });
+
+        const data = await response.json();
+        if (data.choices && data.choices[0]) {
+          responseDiv.textContent = data.choices
