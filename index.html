@@ -9,7 +9,7 @@
     #video, #preview { width: 100%; height: 300px; object-fit: cover; }
     #preview { display: none; }
     #prompt, #textPrompt { width: 100%; height: 80px; margin: 10px 0; }
-    #visionModelSelect, #textModelSelect { width: 100%; padding: 5px; margin: 10px 0; }
+    #visionModelSelect, #textModelSelect, #cameraSelect { width: 100%; padding: 5px; margin: 10px 0; }
     #apiKeySuffix { width: 100%; padding: 5px; margin: 10px 0; }
     button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; margin: 5px 0; }
     button:disabled { background: #cccccc; cursor: not-allowed; }
@@ -30,13 +30,17 @@
   <h3>Photo Input</h3>
   <video id="video" autoplay></video>
   <img id="preview" alt="Captured Image">
+  <select id="cameraSelect">
+    <option value="">Select a camera</option>
+  </select>
+  <button id="capturePicture">Capture/Recapture Picture</button>
   <select id="visionModelSelect">
     <option value="gpt-4o" selected>GPT-4o (default)</option>
     <option value="gpt-4o-mini">GPT-4o-mini</option>
     <option value="gpt-4-turbo">GPT-4-turbo</option>
   </select>
   <textarea id="prompt" placeholder="Enter your prompt for the photo"></textarea>
-  <button id="capture">Take Picture and Send</button>
+  <button id="captureAndSend">Take Picture and Send</button>
 
   <hr>
 
@@ -65,36 +69,86 @@
     const textModelSelect = document.getElementById('textModelSelect');
     const textPromptInput = document.getElementById('textPrompt');
     const apiKeySuffixInput = document.getElementById('apiKeySuffix');
-    const captureButton = document.getElementById('capture');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const capturePictureButton = document.getElementById('capturePicture');
+    const captureAndSendButton = document.getElementById('captureAndSend');
     const sendTextButton = document.getElementById('sendText');
     const responseDiv = document.getElementById('response');
     const PARTIAL_API_KEY = 'sk-proj-FBuIl-JhBUGcmCSWsitdF8dNXUyxNKEtTNAUWO_J3VWycvbVONEoA_34nzZh9b0UroMmCxwVAST3BlbkFJIbeKJrAa-V2NHU9kFfR6jS6gYLuUD61NsbAOuuqfq-nFcbBHof5IN4wv6wTQ-vt1dGlGj'; // Replace with your partial key
+    let currentStream = null;
+    let capturedImageData = null;
 
-    // Start front-facing camera
-    navigator.mediaDevices.getUserMedia({ 
-      video: { facingMode: 'user' }
-    })
-      .then(stream => {
+    // Populate camera dropdown
+    async function populateCameras() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        cameraSelect.innerHTML = '<option value="">Select a camera</option>';
+        videoDevices.forEach(device => {
+          const option = document.createElement('option');
+          option.value = device.deviceId;
+          option.text = device.label || `Camera ${cameraSelect.length + 1}`;
+          cameraSelect.appendChild(option);
+        });
+      } catch (err) {
+        responseDiv.textContent = 'Error listing cameras: ' + err.message;
+      }
+    }
+
+    // Start selected camera
+    async function startCamera(deviceId) {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+      try {
+        const constraints = { video: deviceId ? { deviceId: { exact: deviceId } } : true };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = stream;
+        currentStream = stream;
+      } catch (err) {
+        responseDiv.textContent = 'Error starting camera: ' + err.message;
+        console.error(err);
+      }
+    }
+
+    // Populate cameras on load and when permissions granted
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(() => {
+        populateCameras();
       })
-      .catch(err => {
-        responseDiv.textContent = 'Error accessing front camera: ' + err.message;
-        console.error(err); // Log to console for debugging
+      .catch(() => {
+        populateCameras(); // Still try to list cameras even if initial access fails
       });
 
-    // Photo capture and send
-    captureButton.addEventListener('click', async () => {
+    // Update camera when selection changes
+    cameraSelect.addEventListener('change', () => {
+      const deviceId = cameraSelect.value;
+      if (deviceId) {
+        startCamera(deviceId);
+      }
+    });
+
+    // Capture picture
+    capturePictureButton.addEventListener('click', () => {
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       canvas.getContext('2d').drawImage(video, 0, 0);
-      const imageData = canvas.toDataURL('image/jpeg');
-
-      preview.src = imageData;
+      capturedImageData = canvas.toDataURL('image/jpeg');
+      
+      preview.src = capturedImageData;
       preview.style.display = 'block';
       video.style.display = 'none';
+    });
 
-      const base64Image = imageData.split(',')[1];
+    // Photo capture and send
+    captureAndSendButton.addEventListener('click', async () => {
+      if (!capturedImageData) {
+        responseDiv.textContent = 'Please capture a picture first.';
+        return;
+      }
+
+      const base64Image = capturedImageData.split(',')[1];
       const prompt = promptInput.value || 'Describe this image';
       const selectedModel = visionModelSelect.value;
       const apiKeySuffix = apiKeySuffixInput.value.trim();
@@ -106,7 +160,8 @@
       }
 
       responseDiv.textContent = 'Loading...';
-      captureButton.disabled = true;
+      capturePictureButton.disabled = true;
+      captureAndSendButton.disabled = true;
       sendTextButton.disabled = true;
 
       try {
@@ -139,7 +194,8 @@
       } catch (err) {
         responseDiv.textContent = 'Fetch error: ' + err.message;
       } finally {
-        captureButton.disabled = false;
+        capturePictureButton.disabled = false;
+        captureAndSendButton.disabled = false;
         sendTextButton.disabled = false;
       }
     });
@@ -161,7 +217,8 @@
       }
 
       responseDiv.textContent = 'Loading...';
-      captureButton.disabled = true;
+      capturePictureButton.disabled = true;
+      captureAndSendButton.disabled = true;
       sendTextButton.disabled = true;
 
       try {
@@ -191,7 +248,8 @@
       } catch (err) {
         responseDiv.textContent = 'Fetch error: ' + err.message;
       } finally {
-        captureButton.disabled = false;
+        capturePictureButton.disabled = false;
+        captureAndSendButton.disabled = false;
         sendTextButton.disabled = false;
       }
     });
