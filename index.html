@@ -68,7 +68,7 @@
     const captureButton = document.getElementById('capture');
     const sendTextButton = document.getElementById('sendText');
     const responseDiv = document.getElementById('response');
-    const PARTIAL_API_KEY = 'sk-proj-5a_kSPWS3gbFfRK4NCpBjdGNLSBmFAM7pJARHoc_KG9_RZzKH-2FdkJjmmjixeNrR28TO7alE8T3BlbkFJ6wUtOkKZadzNvfobUy8zDWIHcgdBePSS__5p0h7fy5W7fIkyDy74dDhUnbTY1oCv_16jNJ'; // Replace with your partial key (minus last characters)
+    const PARTIAL_API_KEY = 'sk-proj-5a_kSPWS3gbFfRK4NCpBjdGNLSBmFAM7pJARHoc_KG9_RZzKH-2FdkJjmmjixeNrR28TO7alE8T3BlbkFJ6wUtOkKZadzNvfobUy8zDWIHcgdBePSS__5p0h7fy5W7fIkyDy74dDhUnbTY1oCv_16jNJ'; // Replace with your partial key
 
     // Start front-facing camera
     navigator.mediaDevices.getUserMedia({ 
@@ -79,6 +79,7 @@
       })
       .catch(err => {
         responseDiv.textContent = 'Error accessing front camera: ' + err.message;
+        console.error(err); // Log to console for debugging
       });
 
     // Photo capture and send
@@ -183,4 +184,17 @@
 
         const data = await response.json();
         if (data.choices && data.choices[0]) {
-          responseDiv.textContent = data.choices
+          responseDiv.textContent = data.choices[0].message.content;
+        } else {
+          responseDiv.textContent = 'Error: ' + (data.error?.message || 'Unknown error');
+        }
+      } catch (err) {
+        responseDiv.textContent = 'Fetch error: ' + err.message;
+      } finally {
+        captureButton.disabled = false;
+        sendTextButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
